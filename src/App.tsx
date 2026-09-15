@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { Database } from "sql.js";
 import { openDatabase, getAllSessions, updateSession, exportDbFile, type SessionRow } from "./db";
 import { CATALOG } from "./catalog";
+import { VIDEO_SOURCES } from "./videoSources";
+import Player from "./Player";
 import "./App.css";
 
 const SITE = "https://summittelaviv.awslivestream.com/";
@@ -29,6 +31,7 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [playing, setPlaying] = useState<{ id: string; title: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -260,6 +263,7 @@ export default function App() {
                             noteTimers.current[id] = setTimeout(() => applyPatch(id, { notes }), 500);
                           }}
                           onBadInput={() => showToast("Use m:ss, e.g. 12:30")}
+                          onWatch={() => setPlaying({ id, title })}
                         />
                       );
                     })}
@@ -277,6 +281,16 @@ export default function App() {
       </footer>
 
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+
+      {playing && VIDEO_SOURCES[playing.id] && (
+        <Player
+          title={playing.title}
+          src={VIDEO_SOURCES[playing.id]}
+          initialPosition={byId[playing.id]?.position_sec ?? 0}
+          onProgress={(sec, dur) => applyPatch(playing.id, { position_sec: sec, duration_sec: dur })}
+          onClose={() => setPlaying(null)}
+        />
+      )}
     </div>
   );
 }
@@ -306,13 +320,14 @@ function QuickAdd({ byId, onSave, onError }: { byId: Record<string, SessionRow>;
 }
 
 function Row({
-  row, title, onStatus, onPosition, onNotes, onBadInput,
+  row, title, onStatus, onPosition, onNotes, onBadInput, onWatch,
 }: {
   row: SessionRow; title: string;
   onStatus: (s: SessionRow["status"]) => void;
   onPosition: (sec: number) => void;
   onNotes: (notes: string) => void;
   onBadInput: () => void;
+  onWatch: () => void;
 }) {
   const [posText, setPosText] = useState(fmtTime(row.position_sec));
   const [showNotes, setShowNotes] = useState(false);
@@ -353,7 +368,13 @@ function Row({
       </div>
       <div className="rowmeta">
         <button className={`notesbtn ${row.notes ? "has" : ""}`} onClick={() => setShowNotes((s) => !s)} title="Notes">✎</button>
-        <a className="openlink" target="_blank" rel="noopener noreferrer" href={SITE + row.id}>Open ↗</a>
+        {VIDEO_SOURCES[row.id] ? (
+          <button className="watchbtn" onClick={onWatch}>
+            {row.status === "in_progress" ? "▶ Resume" : "▶ Watch"}
+          </button>
+        ) : (
+          <a className="openlink" target="_blank" rel="noopener noreferrer" href={SITE + row.id}>Open ↗</a>
+        )}
       </div>
       {showNotes && (
         <div className="notesbox">

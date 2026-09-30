@@ -31,7 +31,7 @@ function persistSoon() {
 export async function openDatabase(): Promise<Database> {
   if (db) return db;
   const { default: initSqlJs } = await import("sql.js");
-  const SQL = await initSqlJs({ locateFile: () => "/sql-wasm.wasm" });
+  const SQL = await initSqlJs({ locateFile: () => `${import.meta.env.BASE_URL}sql-wasm.wasm` });
   const saved = await get<Uint8Array>(IDB_KEY);
   db = saved ? new SQL.Database(saved) : new SQL.Database();
 

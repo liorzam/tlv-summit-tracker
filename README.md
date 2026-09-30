@@ -1,32 +1,52 @@
-# React + TypeScript + Vite
+# Summit Tel Aviv — Watchlist
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A local tracker for the [Summit Tel Aviv](https://summittelaviv.awslivestream.com/) session recordings. It lists the summit catalog, plays the videos in the browser, and remembers how far you got.
 
-Currently, two official plugins are available:
+Progress never leaves the machine. The app keeps a real SQLite database in this browser’s IndexedDB.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What it does
 
-## React Compiler
+The catalog is 48 sessions grouped into tracks (keynote, developers, agentic apps, containers, data, databases, architecture, security, and demos). Each session has a status:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Not started**
+- **In progress** — set automatically once playback position is past zero
+- **Watched** — set automatically once position reaches 95% of the duration
 
-## Expanding the Oxlint configuration
+You can also set the status by hand.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+For each session you can:
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+- **Watch or resume** in a built-in HLS player. It starts from the saved position and writes position and duration back while you watch.
+- **Search** by title or session id, and filter by track or status.
+- **Take notes** on a session.
+- **Type a timestamp** (`12:30` or a number of seconds) if you want to set the position yourself.
+- **Capture progress from the official site** with the “Track this session” bookmarklet. On a playing session page it reads the video’s current time and opens this app with that session updated.
+- **Download a `.sqlite` backup** and move it to another browser.
+
+The sidebar shows how many sessions are watched, in progress, and not started. Opening the app lands on In progress when anything is already underway, otherwise on Not started.
+
+## How progress is stored
+
+[`src/db.ts`](src/db.ts) runs SQLite in the browser with [sql.js](https://github.com/sql-js/sql.js). The database file is saved in IndexedDB under `summit-watchlist.sqlite`.
+
+On startup the app seeds every session from [`src/catalog.ts`](src/catalog.ts). Existing status, position, duration, and notes are left alone; title and track are refreshed from the catalog.
+
+Playback URLs live in [`src/videoSources.ts`](src/videoSources.ts). The player ([`src/Player.tsx`](src/Player.tsx)) uses hls.js, or Safari’s native HLS, and saves progress about every five seconds plus on pause and when the video ends.
+
+## Run it
+
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Other scripts:
+
+```bash
+npm run build    # typecheck and production build
+npm run preview  # serve the production build
+npm run lint
+```
+
+`VITE_ARTIFACT_BUILD=true` is only for the hosted preview sandbox, where the in-page player cannot reach the streaming host. In that build, Watch opens the session on the official site instead.
+image.png

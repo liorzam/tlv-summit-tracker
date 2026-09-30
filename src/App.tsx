@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef, lazy, Suspense } from "react";
 import type { Database } from "sql.js";
 import { openDatabase, getAllSessions, updateSession, exportDbFile, type SessionRow } from "./db";
 import { CATALOG } from "./catalog";
 import { VIDEO_SOURCES } from "./videoSources";
-import Player from "./Player";
+const Player = lazy(() => import("./Player"));
 import "./App.css";
 
 const SITE = "https://summittelaviv.awslivestream.com/";
+// When building for the Claude Artifact preview (VITE_ARTIFACT_BUILD=true), in-page HLS
+// playback can't reach the external streaming host from that sandbox, so "Watch" links out
+// to the real site instead of opening the built-in player. The real deployment is unaffected.
+const ARTIFACT_BUILD = import.meta.env.VITE_ARTIFACT_BUILD === "true";
 
 function fmtTime(sec: number): string {
   sec = Math.max(0, Math.floor(sec || 0));
@@ -29,6 +33,7 @@ export default function App() {
   const [db, setDb] = useState<Database | null>(null);
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [activeFilter, setActiveFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [playing, setPlaying] = useState<{ id: string; title: string } | null>(null);
@@ -71,6 +76,10 @@ export default function App() {
       if (cancelled) return;
       setDb(database);
       refresh(database);
+
+      const initialRows = getAllSessions(database);
+      const hasInProgress = initialRows.some((r) => r.status === "in_progress");
+      setStatusFilter(hasInProgress ? "in_progress" : "not_started");
 
       const params = new URLSearchParams(window.location.search);
       const vid = params.get("vid");
@@ -153,9 +162,18 @@ export default function App() {
               </div>
             </div>
             <div className="breakdown">
-              <div className="breakdown-row"><span className="dot" style={{ background: "var(--watched)" }} />Watched<span className="n">{counts.watched}</span></div>
-              <div className="breakdown-row"><span className="dot" style={{ background: "var(--progress)" }} />In progress<span className="n">{counts.in_progress}</span></div>
-              <div className="breakdown-row"><span className="dot" style={{ background: "var(--notstarted)" }} />Not started<span className="n">{counts.not_started}</span></div>
+              <div
+                className={`breakdown-row ${statusFilter === "watched" ? "active" : ""}`}
+                onClick={() => setStatusFilter((f) => (f === "watched" ? "all" : "watched"))}
+              ><span className="dot" style={{ background: "var(--watched)" }} />Watched<span className="n">{counts.watched}</span></div>
+              <div
+                className={`breakdown-row ${statusFilter === "in_progress" ? "active" : ""}`}
+                onClick={() => setStatusFilter((f) => (f === "in_progress" ? "all" : "in_progress"))}
+              ><span className="dot" style={{ background: "var(--progress)" }} />In progress<span className="n">{counts.in_progress}</span></div>
+              <div
+                className={`breakdown-row ${statusFilter === "not_started" ? "active" : ""}`}
+                onClick={() => setStatusFilter((f) => (f === "not_started" ? "all" : "not_started"))}
+              ><span className="dot" style={{ background: "var(--notstarted)" }} />Not started<span className="n">{counts.not_started}</span></div>
             </div>
           </div>
 
@@ -219,10 +237,29 @@ export default function App() {
         <main>
           <div className="searchbar">
             <input type="text" placeholder="Search sessions…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <div className="statuspills">
+              {(["all", "not_started", "in_progress", "watched"] as const).map((key) => {
+                const label = key === "all" ? "All" : key === "not_started" ? "Not started" : key === "in_progress" ? "In progress" : "Watched";
+                const n = key === "all" ? total : counts[key];
+                const color = key === "all" ? "var(--accent)" : key === "not_started" ? "var(--notstarted)" : key === "in_progress" ? "var(--progress)" : "var(--watched)";
+                return (
+                  <div
+                    key={key}
+                    className={`statuspill ${statusFilter === key ? "active" : ""}`}
+                    onClick={() => setStatusFilter(key)}
+                  >
+                    <span className="dot" style={{ background: color }} />
+                    {label}
+                    <span className="n">{n}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {CATALOG.filter((t) => activeFilter === "all" || activeFilter === t.track).map((track) => {
             const items = track.items.filter(([id, title]) => {
+              if (statusFilter !== "all" && byId[id]?.status !== statusFilter) return false;
               if (!q) return true;
               return title.toLowerCase().includes(q) || id.toLowerCase().includes(q);
             });
@@ -264,6 +301,7 @@ export default function App() {
                           }}
                           onBadInput={() => showToast("Use m:ss, e.g. 12:30")}
                           onWatch={() => setPlaying({ id, title })}
+                          watchHref={ARTIFACT_BUILD ? SITE + id : undefined}
                         />
                       );
                     })}
@@ -283,13 +321,15 @@ export default function App() {
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
 
       {playing && VIDEO_SOURCES[playing.id] && (
-        <Player
-          title={playing.title}
-          src={VIDEO_SOURCES[playing.id]}
-          initialPosition={byId[playing.id]?.position_sec ?? 0}
-          onProgress={(sec, dur) => applyPatch(playing.id, { position_sec: sec, duration_sec: dur })}
-          onClose={() => setPlaying(null)}
-        />
+        <Suspense fallback={null}>
+          <Player
+            title={playing.title}
+            src={VIDEO_SOURCES[playing.id]}
+            initialPosition={byId[playing.id]?.position_sec ?? 0}
+            onProgress={(sec, dur) => applyPatch(playing.id, { position_sec: sec, duration_sec: dur })}
+            onClose={() => setPlaying(null)}
+          />
+        </Suspense>
       )}
     </div>
   );
@@ -320,7 +360,7 @@ function QuickAdd({ byId, onSave, onError }: { byId: Record<string, SessionRow>;
 }
 
 function Row({
-  row, title, onStatus, onPosition, onNotes, onBadInput, onWatch,
+  row, title, onStatus, onPosition, onNotes, onBadInput, onWatch, watchHref,
 }: {
   row: SessionRow; title: string;
   onStatus: (s: SessionRow["status"]) => void;
@@ -328,6 +368,10 @@ function Row({
   onNotes: (notes: string) => void;
   onBadInput: () => void;
   onWatch: () => void;
+  /** When set, "Watch" opens this URL in a new tab instead of the built-in player
+   *  (used for the Claude Artifact preview, where in-page HLS playback can't reach
+   *  the external streaming host). */
+  watchHref?: string;
 }) {
   const [posText, setPosText] = useState(fmtTime(row.position_sec));
   const [showNotes, setShowNotes] = useState(false);
@@ -369,9 +413,15 @@ function Row({
       <div className="rowmeta">
         <button className={`notesbtn ${row.notes ? "has" : ""}`} onClick={() => setShowNotes((s) => !s)} title="Notes">✎</button>
         {VIDEO_SOURCES[row.id] ? (
-          <button className="watchbtn" onClick={onWatch}>
-            {row.status === "in_progress" ? "▶ Resume" : "▶ Watch"}
-          </button>
+          watchHref ? (
+            <a className="watchbtn" target="_blank" rel="noopener noreferrer" href={watchHref} title="Playback isn't available in this preview — opens the original site">
+              {row.status === "in_progress" ? "▶ Resume ↗" : "▶ Watch ↗"}
+            </a>
+          ) : (
+            <button className="watchbtn" onClick={onWatch}>
+              {row.status === "in_progress" ? "▶ Resume" : "▶ Watch"}
+            </button>
+          )
         ) : (
           <a className="openlink" target="_blank" rel="noopener noreferrer" href={SITE + row.id}>Open ↗</a>
         )}

@@ -105,3 +105,14 @@ input[type=text], input:not([type]), select{ font-family:inherit; font-size:13px
 .toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(8px); background:var(--text); color:var(--bg); padding:10px 16px; border-radius:8px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:50; box-shadow:var(--shadow); }
 .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 footer{ max-width:1180px; margin:26px auto 0; padding-inline:20px; color:var(--muted); font-size:11.5px; }
+
+.breakdown-row{ cursor:pointer; padding:2px 4px; border-radius:6px; }
+.breakdown-row:hover{ background:var(--surface-2); }
+.breakdown-row.active{ background:var(--accent-soft); }
+.searchbar{ flex-wrap:wrap; }
+.statuspills{ display:flex; gap:6px; flex-wrap:wrap; }
+.statuspill{ display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border-radius:99px; font-size:12px; font-weight:600; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; }
+.statuspill:hover{ background:var(--surface-2); }
+.statuspill.active{ border-color:var(--accent); background:var(--accent-soft); color:var(--accent); }
+.statuspill .dot{ width:7px; height:7px; }
+.statuspill .n{ font-family:"IBM Plex Mono",monospace; opacity:.75; }

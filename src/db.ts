@@ -1,4 +1,4 @@
-import initSqlJs, { type Database } from "sql.js";
+import type { Database } from "sql.js";
 import { get, set } from "idb-keyval";
 import { ALL_ITEMS } from "./catalog";
 
@@ -30,6 +30,7 @@ function persistSoon() {
 
 export async function openDatabase(): Promise<Database> {
   if (db) return db;
+  const { default: initSqlJs } = await import("sql.js");
   const SQL = await initSqlJs({ locateFile: () => "/sql-wasm.wasm" });
   const saved = await get<Uint8Array>(IDB_KEY);
   db = saved ? new SQL.Database(saved) : new SQL.Database();

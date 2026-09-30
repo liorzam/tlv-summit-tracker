@@ -1,4 +1,5 @@
-# Summit Tel Aviv — Watchlist
+# Summit Tel Aviv 2026 — Watchlist
+<img width="1158" height="814" alt="image" src="https://github.com/user-attachments/assets/0d2bd3c7-6e2f-4ff5-a5ef-d2596d801218" />
 
 A local tracker for the [Summit Tel Aviv](https://summittelaviv.awslivestream.com/) session recordings. It lists the summit catalog, plays the videos in the browser, and remembers how far you got.
 
